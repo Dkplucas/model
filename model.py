@@ -18,6 +18,7 @@ import pandas as pd
 import json
 import pickle
 
+# find_image_path function
 def find_image_path(image_filename, data_base_dir='data/ap-10K/'):
     """Search for an image file recursively in the dataset directory."""
     for root, dirs, files in os.walk(data_base_dir):
@@ -25,6 +26,7 @@ def find_image_path(image_filename, data_base_dir='data/ap-10K/'):
             return os.path.join(root, image_filename)
     return None
 
+# Load and preprocess image for deep learning model - ENSURES 3 CHANNELS
 def load_and_preprocess_image_for_dl(file_path, target_size=(224, 224), data_base_dir='data/ap-10K/'):
     """Load and preprocess image for deep learning model - ENSURES 3 CHANNELS"""
     try:
@@ -51,6 +53,7 @@ def load_and_preprocess_image_for_dl(file_path, target_size=(224, 224), data_bas
     except Exception as e:
         return None
 
+# Create a data generator
 def create_data_generator(X, y, batch_size=32, shuffle=False):
     """Create a data generator that handles small datasets properly"""
     # Convert to lists if they are pandas Series
@@ -158,6 +161,7 @@ def create_callbacks():
         keras.callbacks.CSVLogger('training_log.csv')
     ]
 
+# Training function
 def train_model(X_train, y_train, X_val, y_val, epochs=50, batch_size=16):
     """Train the model with the given data"""
     train_gen, train_samples = create_data_generator(X_train, y_train, batch_size, shuffle=True)
@@ -193,6 +197,7 @@ def train_model(X_train, y_train, X_val, y_val, epochs=50, batch_size=16):
     
     return history
 
+# Evaluation function
 def evaluate_model(X_test, y_test):
     """Evaluate the model on test data"""
     # Preload all test data for proper evaluation
@@ -221,6 +226,7 @@ def evaluate_model(X_test, y_test):
     
     return results
 
+# Prediction and analysis function
 def predict_and_analyze(X_test, y_test):
     """Make predictions and provide detailed analysis"""
     # Preload all test data
@@ -278,6 +284,7 @@ def predict_and_analyze(X_test, y_test):
     
     return y_pred, y_pred_proba
 
+# Plot training history
 def plot_training_history(history):
     """Plot training history"""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
@@ -302,6 +309,7 @@ def plot_training_history(history):
     plt.savefig('training_history.png')
     plt.show()
 
+# Save model components
 def save_model_completely(model, base_filename='animal_weight_classifier'):
     """Save model architecture, weights, and training history separately"""
     try:

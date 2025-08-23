@@ -21,7 +21,7 @@ This project implements an animal weight classification system using deep learni
 This project uses two complementary approaches for animal weight classification:
 
 1. **Traditional ML Approach**: Histogram of Oriented Gradients (HOG) features + Random Forest
-2. **Deep Learning Approach**: EfficientNetB0 with transfer 
+2. **Deep Learning Approach**: Custom CNN
 
 The classification is based on body length measurements calculated from animal keypoint annotations, creating proxy labels for weight categories.
 
