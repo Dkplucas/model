@@ -13,6 +13,10 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import cross_val_score
 import seaborn as sns
 import pandas as pd
 import json
@@ -20,6 +24,7 @@ import pickle
 from sklearn.model_selection import train_test_split
 import io
 import sys
+import time
 
 # Load dataset function (added to fix missing data issue)
 def load_dataset_from_csv():
@@ -30,12 +35,12 @@ def load_dataset_from_csv():
         df_val = pd.read_csv('data/val_split.csv')
         df_test = pd.read_csv('data/test_split.csv')
         
-        X_train = df_train['file_name']
-        y_train = df_train['weight_class']
-        X_val = df_val['file_name']
-        y_val = df_val['weight_class']
-        X_test = df_test['file_name']
-        y_test = df_test['weight_class']
+        X_train = df_train['file_name'].tolist()
+        y_train = df_train['weight_class'].tolist()
+        X_val = df_val['file_name'].tolist()
+        y_val = df_val['weight_class'].tolist()
+        X_test = df_test['file_name'].tolist()
+        y_test = df_test['weight_class'].tolist()
         
         print(f"Loaded dataset from CSV files: Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}")
         return X_train, y_train, X_val, y_val, X_test, y_test
@@ -139,56 +144,41 @@ def load_and_preprocess_image_for_dl(file_path, target_size=(224, 224), data_bas
         print(f"Error loading image {file_path}: {e}")
         return None
 
-# Create a data generator
-def create_data_generator(X, y, batch_size=32, shuffle=False):
-    """Create a data generator that handles small datasets properly"""
-    # Convert to lists if they are pandas Series
-    if hasattr(X, 'tolist'):
-        X = X.tolist()
-    if hasattr(y, 'tolist'):
-        y = y.tolist()
-    
-    # Preload all images to avoid generator issues
-    images = []
-    labels = []
-    
-    print("Preloading images...")
-    for i, (file_path, label) in enumerate(zip(X, y)):
-        if i % 50 == 0:
-            print(f"Loading image {i}/{len(X)}")
-        image = load_and_preprocess_image_for_dl(file_path)
-        if image is not None:
-            images.append(image)
-            labels.append(label)
-    
-    images = np.array(images)
-    labels = np.array(labels)
-    
-    print(f"Successfully loaded {len(images)}/{len(X)} images")
-    
-    # Create data generator
-    if shuffle:
-        datagen = keras.preprocessing.image.ImageDataGenerator(
-            preprocessing_function=applications.efficientnet.preprocess_input,
-            rotation_range=20,
-            width_shift_range=0.2,
-            height_shift_range=0.2,
-            horizontal_flip=True,
-            zoom_range=0.2,
-            fill_mode='nearest'
-        )
-    else:
-        datagen = keras.preprocessing.image.ImageDataGenerator(
-            preprocessing_function=applications.efficientnet.preprocess_input
-        )
-    
-    generator = datagen.flow(
-        images, labels,
-        batch_size=min(batch_size, len(images)),
-        shuffle=shuffle
-    )
-    
-    return generator, len(images)
+# Load and preprocess image for Random Forest (flattened features)
+def load_and_preprocess_image_for_rf(file_path, target_size=(64, 64), data_base_dir='data/ap-10K/'):
+    """Load and preprocess image for Random Forest classifier"""
+    try:
+        # For dummy images, create a random image
+        if file_path.startswith('dummy_image_'):
+            # Create a random image for testing and flatten it
+            image = np.random.rand(*target_size, 3).astype(np.float32)
+            return image.flatten()
+        
+        # Find the image file
+        image_filename = os.path.basename(file_path)
+        full_path = find_image_path(image_filename, data_base_dir)
+        
+        if full_path is None:
+            # If not found, try using the provided path directly
+            full_path = file_path
+            if not os.path.exists(full_path):
+                print(f"Warning: Image file not found: {file_path}")
+                return None
+        
+        # Load image using TensorFlow
+        image = tf.io.read_file(full_path)
+        image = tf.image.decode_jpeg(image, channels=3)  # FORCE 3 CHANNELS
+        
+        # Convert to float32 and resize to smaller size for RF
+        image = tf.image.convert_image_dtype(image, tf.float32)
+        image = tf.image.resize(image, target_size)
+        
+        # Flatten the image for Random Forest
+        return image.numpy().flatten()
+        
+    except Exception as e:
+        print(f"Error loading image {file_path} for RF: {e}")
+        return None
 
 # Build a simpler model from scratch to avoid serialization issues
 def build_simple_model(input_shape=(224, 224, 3), num_classes=3):
@@ -208,6 +198,115 @@ def build_simple_model(input_shape=(224, 224, 3), num_classes=3):
         layers.Dense(num_classes, activation='softmax')
     ])
     return model
+
+# Train Random Forest classifier
+def train_random_forest(X_train, y_train, X_test, y_test):
+    """Train and evaluate a Random Forest classifier"""
+    print("\n" + "="*60)
+    print("TRAINING RANDOM FOREST CLASSIFIER")
+    print("="*60)
+    
+    start_time = time.time()
+    
+    # Preload images for Random Forest (smaller size for efficiency)
+    print("Preloading images for Random Forest...")
+    X_train_rf = []
+    y_train_rf = []
+    failed_count = 0
+    
+    for i, (file_path, label) in enumerate(zip(X_train, y_train)):
+        if i % 50 == 0:
+            print(f"Loading RF image {i}/{len(X_train)}")
+        features = load_and_preprocess_image_for_rf(file_path, target_size=(64, 64))
+        if features is not None:
+            X_train_rf.append(features)
+            y_train_rf.append(label)
+        else:
+            failed_count += 1
+    
+    X_test_rf = []
+    y_test_rf = []
+    test_failed_count = 0
+    
+    for i, (file_path, label) in enumerate(zip(X_test, y_test)):
+        features = load_and_preprocess_image_for_rf(file_path, target_size=(64, 64))
+        if features is not None:
+            X_test_rf.append(features)
+            y_test_rf.append(label)
+        else:
+            test_failed_count += 1
+    
+    X_train_rf = np.array(X_train_rf)
+    y_train_rf = np.array(y_train_rf)
+    X_test_rf = np.array(X_test_rf)
+    y_test_rf = np.array(y_test_rf)
+    
+    print(f"RF Training samples: {len(X_train_rf)} (failed: {failed_count})")
+    print(f"RF Test samples: {len(X_test_rf)} (failed: {test_failed_count})")
+    
+    if len(X_train_rf) == 0 or len(X_test_rf) == 0:
+        print("Not enough data for Random Forest training")
+        return None
+    
+    # Create and train Random Forest classifier
+    rf_classifier = RandomForestClassifier(
+        n_estimators=100,
+        max_depth=20,
+        random_state=42,
+        n_jobs=-1  # Use all available cores
+    )
+    
+    print("Training Random Forest...")
+    rf_classifier.fit(X_train_rf, y_train_rf)
+    
+    # Make predictions
+    print("Making predictions with Random Forest...")
+    y_pred_rf = rf_classifier.predict(X_test_rf)
+    y_pred_proba_rf = rf_classifier.predict_proba(X_test_rf)
+    
+    # Calculate accuracy
+    accuracy = np.mean(y_pred_rf == y_test_rf)
+    
+    # Generate classification report
+    print("\nRandom Forest Results:")
+    print(f"Accuracy: {accuracy:.4f}")
+    print("\nClassification Report:")
+    report = classification_report(
+        y_test_rf, 
+        y_pred_rf, 
+        target_names=['Underweight', 'Healthy', 'Overweight'],
+        zero_division=0
+    )
+    print(report)
+    
+    # Confusion matrix
+    plt.figure(figsize=(10, 8))
+    cm = confusion_matrix(y_test_rf, y_pred_rf)
+    
+    class_names = ['Underweight', 'Healthy', 'Overweight']
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Reds',
+                xticklabels=class_names,
+                yticklabels=class_names)
+    plt.title('Random Forest - Confusion Matrix')
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
+    plt.tight_layout()
+    plt.savefig('random_forest_confusion_matrix.png')
+    plt.show()
+    
+    end_time = time.time()
+    training_time = end_time - start_time
+    print(f"Random Forest training and evaluation time: {training_time:.2f} seconds")
+    
+    return {
+        'classifier': rf_classifier,
+        'accuracy': accuracy,
+        'predictions': y_pred_rf,
+        'probabilities': y_pred_proba_rf,
+        'training_time': training_time,
+        'train_samples': len(X_train_rf),
+        'test_samples': len(X_test_rf)
+    }
 
 # Create the simpler model
 model = build_simple_model(input_shape=(224, 224, 3), num_classes=3)
@@ -249,34 +348,6 @@ def create_callbacks():
         keras.callbacks.CSVLogger('training_log.csv')
     ]
 
-# Custom data generator class to fix the warning
-class CustomDataGenerator(keras.utils.Sequence):
-    def __init__(self, X, y, batch_size=32, shuffle=True, augment=False):
-        self.X = X
-        self.y = y
-        self.batch_size = batch_size
-        self.shuffle = shuffle
-        self.augment = augment
-        self.indexes = np.arange(len(self.X))
-        self.on_epoch_end()
-        
-        # Initialize the base class properly to fix the warning
-        super().__init__()
-    
-    def __len__(self):
-        return int(np.ceil(len(self.X) / self.batch_size))
-    
-    def __getitem__(self, index):
-        batch_indexes = self.indexes[index * self.batch_size:(index + 1) * self.batch_size]
-        X_batch = self.X[batch_indexes]
-        y_batch = self.y[batch_indexes]
-        
-        return X_batch, y_batch
-    
-    def on_epoch_end(self):
-        if self.shuffle:
-            np.random.shuffle(self.indexes)
-
 # Training function with improved data handling
 def train_model(X_train, y_train, X_val, y_val, epochs=50, batch_size=16):
     """Train the model with the given data"""
@@ -284,11 +355,17 @@ def train_model(X_train, y_train, X_val, y_val, epochs=50, batch_size=16):
     print("Preloading training images...")
     X_train_loaded = []
     y_train_loaded = []
+    train_failed_count = 0
+    
     for i, (file_path, label) in enumerate(zip(X_train, y_train)):
+        if i % 50 == 0:
+            print(f"Loading training image {i}/{len(X_train)}")
         image = load_and_preprocess_image_for_dl(file_path)
         if image is not None:
             X_train_loaded.append(image)
             y_train_loaded.append(label)
+        else:
+            train_failed_count += 1
     
     X_train_loaded = np.array(X_train_loaded)
     y_train_loaded = np.array(y_train_loaded)
@@ -296,44 +373,50 @@ def train_model(X_train, y_train, X_val, y_val, epochs=50, batch_size=16):
     print("Preloading validation images...")
     X_val_loaded = []
     y_val_loaded = []
+    val_failed_count = 0
+    
     for i, (file_path, label) in enumerate(zip(X_val, y_val)):
+        if i % 50 == 0:
+            print(f"Loading validation image {i}/{len(X_val)}")
         image = load_and_preprocess_image_for_dl(file_path)
         if image is not None:
             X_val_loaded.append(image)
             y_val_loaded.append(label)
+        else:
+            val_failed_count += 1
     
     X_val_loaded = np.array(X_val_loaded)
     y_val_loaded = np.array(y_val_loaded)
     
-    print(f"Training samples: {len(X_train_loaded)}")
-    print(f"Validation samples: {len(X_val_loaded)}")
+    print(f"Training samples: {len(X_train_loaded)} (failed: {train_failed_count})")
+    print(f"Validation samples: {len(X_val_loaded)} (failed: {val_failed_count})")
     
-    # Use the custom data generator
-    train_gen = CustomDataGenerator(X_train_loaded, y_train_loaded, batch_size=batch_size, shuffle=True)
-    val_gen = CustomDataGenerator(X_val_loaded, y_val_loaded, batch_size=batch_size, shuffle=False)
+    if len(X_train_loaded) == 0:
+        print("No training images loaded successfully!")
+        return None, 0
+    
+    # Create simple dataset instead of using generator for small datasets
+    print("Starting training...")
     
     callbacks = create_callbacks()
     
-    print("Starting training...")
-    
-    # Calculate steps
-    train_steps = len(train_gen)
-    val_steps = len(val_gen)
-    
-    print(f"Train steps per epoch: {train_steps}")
-    print(f"Validation steps: {val_steps}")
+    start_time = time.time()
     
     history = model.fit(
-        train_gen,
-        steps_per_epoch=train_steps,
+        X_train_loaded, y_train_loaded,
+        batch_size=min(batch_size, len(X_train_loaded)),
         epochs=epochs,
-        validation_data=val_gen,
-        validation_steps=val_steps,
+        validation_data=(X_val_loaded, y_val_loaded),
         callbacks=callbacks,
-        verbose=1
+        verbose=1,
+        shuffle=True
     )
     
-    return history
+    end_time = time.time()
+    training_time = end_time - start_time
+    print(f"Neural Network training time: {training_time:.2f} seconds")
+    
+    return history, training_time
 
 # Evaluation function
 def evaluate_model(X_test, y_test):
@@ -341,15 +424,22 @@ def evaluate_model(X_test, y_test):
     # Preload all test data for proper evaluation
     X_test_actual = []
     y_test_actual = []
+    test_failed_count = 0
     
     for i, (file_path, label) in enumerate(zip(X_test, y_test)):
+        if i % 50 == 0:
+            print(f"Loading test image {i}/{len(X_test)}")
         image = load_and_preprocess_image_for_dl(file_path)
         if image is not None:
             X_test_actual.append(image)
             y_test_actual.append(label)
+        else:
+            test_failed_count += 1
     
     X_test_actual = np.array(X_test_actual)
     y_test_actual = np.array(y_test_actual)
+    
+    print(f"Test samples loaded: {len(X_test_actual)} (failed: {test_failed_count})")
     
     if len(X_test_actual) == 0:
         print("No test images found!")
@@ -365,20 +455,27 @@ def evaluate_model(X_test, y_test):
     return results
 
 # Prediction and analysis function
-def predict_and_analyze(X_test, y_test):
+def predict_and_analyze(X_test, y_test, model_name="Neural Network"):
     """Make predictions and provide detailed analysis"""
     # Preload all test data
     X_test_actual = []
     y_test_actual = []
+    failed_count = 0
     
     for i, (file_path, label) in enumerate(zip(X_test, y_test)):
+        if i % 50 == 0:
+            print(f"Loading prediction image {i}/{len(X_test)}")
         image = load_and_preprocess_image_for_dl(file_path)
         if image is not None:
             X_test_actual.append(image)
             y_test_actual.append(label)
+        else:
+            failed_count += 1
     
     X_test_actual = np.array(X_test_actual)
     y_test_actual = np.array(y_test_actual)
+    
+    print(f"Prediction samples loaded: {len(X_test_actual)} (failed: {failed_count})")
     
     if len(X_test_actual) == 0:
         print("No test images found!")
@@ -396,7 +493,7 @@ def predict_and_analyze(X_test, y_test):
     print(f"Predicted classes: {unique_preds}")
     
     # Classification report with zero_division parameter to avoid warnings
-    print("\nClassification Report:")
+    print(f"\n{model_name} - Classification Report:")
     report = classification_report(
         y_test_actual, 
         y_pred, 
@@ -413,11 +510,11 @@ def predict_and_analyze(X_test, y_test):
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=class_names,
                 yticklabels=class_names)
-    plt.title('Confusion Matrix')
+    plt.title(f'{model_name} - Confusion Matrix')
     plt.ylabel('True Label')
     plt.xlabel('Predicted Label')
     plt.tight_layout()
-    plt.savefig('confusion_matrix.png')
+    plt.savefig(f'{model_name.lower().replace(" ", "_")}_confusion_matrix.png')
     plt.show()
     
     return y_pred, y_pred_proba
@@ -425,6 +522,10 @@ def predict_and_analyze(X_test, y_test):
 # Plot training history
 def plot_training_history(history):
     """Plot training history"""
+    if history is None:
+        print("No training history to plot")
+        return
+        
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
     
     # Plot accuracy
@@ -447,62 +548,39 @@ def plot_training_history(history):
     plt.savefig('training_history.png')
     plt.show()
 
-# Save model components
-def save_model_completely(model, base_filename='animal_weight_classifier'):
-    """Save model architecture, weights, and training history separately"""
-    try:
-        # 1. Save model architecture as JSON
-        model_json = model.to_json()
-        with open(f'{base_filename}_architecture.json', 'w', encoding='utf-8') as json_file:
-            json_file.write(model_json)
-        print(f"Model architecture saved as {base_filename}_architecture.json")
-        
-        # 2. Save model weights
-        model.save_weights(f'{base_filename}_weights.weights.h5')
-        print(f"Model weights saved as {base_filename}_weights.weights.h5")
-        
-        # 3. Save model summary using a different approach
-        # Capture the model summary output
-        old_stdout = sys.stdout
-        new_stdout = io.StringIO()
-        sys.stdout = new_stdout
-        
-        model.summary()
-        
-        summary_str = new_stdout.getvalue()
-        sys.stdout = old_stdout
-        
-        # Clean the summary string to remove any problematic characters
-        clean_summary = summary_str.encode('ascii', 'ignore').decode('ascii')
-        
-        with open(f'{base_filename}_summary.txt', 'w', encoding='utf-8') as f:
-            f.write(clean_summary)
-        
-        print(f"Model summary saved as {base_filename}_summary.txt")
-        
-        return True
-        
-    except Exception as e:
-        print(f"Error saving model components: {e}")
-        return False
-
-# Load model function (added for completeness)
-def load_model_from_files(architecture_file, weights_file):
-    """Load a model from architecture and weights files"""
-    with open(architecture_file, 'r', encoding='utf-8') as json_file:
-        model_json = json_file.read()
+# Compare model performance
+def compare_models(nn_accuracy, rf_results, nn_time):
+    """Compare the performance of Neural Network and Random Forest"""
+    print("\n" + "="*60)
+    print("MODEL COMPARISON")
+    print("="*60)
     
-    model = model_from_json(model_json)
-    model.load_weights(weights_file)
-    
-    # Recompile the model
-    model.compile(
-        optimizer=keras.optimizers.Adam(learning_rate=1e-4),
-        loss='sparse_categorical_crossentropy',
-        metrics=['accuracy']
-    )
-    
-    return model
+    if rf_results is not None and nn_accuracy is not None:
+        rf_accuracy = rf_results['accuracy']
+        rf_time = rf_results['training_time']
+        
+        print(f"Neural Network Accuracy: {nn_accuracy:.4f}")
+        print(f"Random Forest Accuracy: {rf_accuracy:.4f}")
+        print(f"\nNeural Network Training Time: {nn_time:.2f} seconds")
+        print(f"Random Forest Training Time: {rf_time:.2f} seconds")
+        
+        # Determine which model performed better
+        if nn_accuracy > rf_accuracy:
+            print("\nNeural Network performed better!")
+            improvement = ((nn_accuracy - rf_accuracy) / rf_accuracy) * 100
+            print(f"Improvement: {improvement:.2f}%")
+        elif rf_accuracy > nn_accuracy:
+            print("\nRandom Forest performed better!")
+            improvement = ((rf_accuracy - nn_accuracy) / nn_accuracy) * 100
+            print(f"Improvement: {improvement:.2f}%")
+        else:
+            print("\nBoth models performed equally!")
+    else:
+        if nn_accuracy is not None:
+            print(f"Neural Network Accuracy: {nn_accuracy:.4f}")
+        if rf_results is not None:
+            print(f"Random Forest Accuracy: {rf_results['accuracy']:.4f}")
+        print("Some results not available for comparison")
 
 # Main execution
 if __name__ == "__main__":
@@ -510,52 +588,62 @@ if __name__ == "__main__":
     X_train, y_train, X_val, y_val, X_test, y_test = load_dataset_from_csv()
     
     # First, check your dataset sizes
-    print(f"Dataset sizes:")
+    print(f"\nDataset sizes from CSV:")
     print(f"Train: {len(X_train)}")
     print(f"Validation: {len(X_val)}")
     print(f"Test: {len(X_test)}")
     
     # Check class distribution
     print("\nClass distribution in training set:")
-    if hasattr(y_train, 'value_counts'):
-        print(y_train.value_counts().sort_index())
-    else:
-        print(pd.Series(y_train).value_counts().sort_index())
+    train_counts = pd.Series(y_train).value_counts().sort_index()
+    print(train_counts)
     
-    # Train the model with a smaller batch size for small datasets
+    # Train Random Forest first (usually faster)
+    rf_results = train_random_forest(X_train, y_train, X_test, y_test)
+    
+    # Train the neural network with a smaller batch size for small datasets
     batch_size = min(8, len(X_train) // 2)  # Ensure we have at least 2 batches
     if batch_size < 2:
         batch_size = 2
     
-    print("Starting training...")
-    history = train_model(X_train, y_train, X_val, y_val, epochs=50, batch_size=batch_size)
+    print("\n" + "="*60)
+    print("TRAINING NEURAL NETWORK")
+    print("="*60)
     
-    # Plot training history
-    plot_training_history(history)
+    print("Starting neural network training...")
+    history, nn_time = train_model(X_train, y_train, X_val, y_val, epochs=50, batch_size=batch_size)
     
-    # Evaluate on test set
-    test_results = evaluate_model(X_test, y_test)
-    
-    # Detailed analysis
-    y_pred, y_pred_proba = predict_and_analyze(X_test, y_test)
-    
-    # Save the model components separately
-    save_success = save_model_completely(model)
-    
-    if save_success:
-        print("Model components saved successfully!")
-        print("To reload the model later:")
-        print("1. Load architecture: model = keras.models.model_from_json(json_string)")
-        print("2. Load weights: model.load_weights('animal_weight_classifier_weights.weights.h5')")
-        print("3. Compile: model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])")
-    else:
-        print("Failed to save model components. Using fallback...")
-        # Fallback: Save only predictions and results for report
-        results = {
-            'test_accuracy': test_results[1] if test_results else None,
-            'predictions': y_pred.tolist() if y_pred is not None else [],
-            'true_labels': y_test.tolist() if hasattr(y_test, 'tolist') else list(y_test)
+    if history is not None:
+        # Plot training history
+        plot_training_history(history)
+        
+        # Evaluate on test set
+        test_results = evaluate_model(X_test, y_test)
+        
+        # Detailed analysis for neural network
+        y_pred, y_pred_proba = predict_and_analyze(X_test, y_test, "Neural Network")
+        
+        # Compare model performance
+        if test_results is not None:
+            compare_models(test_results[1], rf_results, nn_time)
+        
+        # Save combined results
+        combined_results = {
+            'neural_network': {
+                'accuracy': test_results[1] if test_results else None,
+                'training_time': nn_time
+            },
+            'random_forest': rf_results if rf_results else None,
+            'dataset_info': {
+                'train_original': len(X_train),
+                'val_original': len(X_val),
+                'test_original': len(X_test)
+            }
         }
-        with open('training_results.pkl', 'wb') as f:
-            pickle.dump(results, f)
-        print("Results saved to training_results.pkl")
+        
+        with open('model_comparison_results.pkl', 'wb') as f:
+            pickle.dump(combined_results, f)
+        
+        print("\nModel comparison results saved to 'model_comparison_results.pkl'")
+    else:
+        print("Neural Network training failed!")
