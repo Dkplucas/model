@@ -1,4 +1,4 @@
-#This file was edited by Lucasdkp
+"""This file was created by Lucasdkp"""
 #Dataset files to be ignored
 data/
 *.jpg
