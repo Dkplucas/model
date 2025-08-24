@@ -1,4 +1,4 @@
-# Animal Body Condition Score Classification using AP-10K Dataset
+# Animal Body Condition Score(BCS) Classification using AP-10K Dataset
 
 This project implements an animal weight classification system using deep learning and traditional machine learning approaches. The system classifies animals into three weight categories: **Underweight**, **Healthy**, and **Overweight** based on their body proportions(Body length) extracted from the AP-10K animal pose dataset.
 
@@ -30,7 +30,7 @@ The classification is based on body length measurements calculated from animal k
 - **Multi-approach Classification**: Both traditional ML and deep learning methods
 - **Robust Data Processing**: Handles missing data and various image formats
 - **Comprehensive Evaluation**: Detailed metrics, confusion matrices, and visualizations
-- **Transfer Learning**: Uses pre-trained EfficientNetB0 for efficient training
+- **Transfer Learning**: Uses custom CNN for the model training
 - **HOG Feature Extraction**: Traditional computer vision features for comparison
 - **Data Augmentation**: Improves model generalization
 - **Model Persistence**: Save and load trained models
@@ -61,6 +61,10 @@ conda install jupyter notebook
 ### 3. Clone/Download Project
 
 Download this project and navigate to the project directory.
+
+```
+git clone https://github.com/Dkplucas/model.git
+```
 
 ### 4. Install Dependencies
 
@@ -174,7 +178,7 @@ Run `model.py` in Jupyter Notebook:
 
 **What this does:**
 
-- Builds and trains EfficientNetB0-based CNN model
+- Builds and trains custom CNN model
 - Implements data augmentation and callbacks
 - Evaluates model performance on test set
 - Generates confusion matrices and classification reports
@@ -191,17 +195,22 @@ Run `model.py` in Jupyter Notebook:
 
 ## 🏗️ Model Architecture
 
-### Deep Learning Model (EfficientNetB0)
+### Deep Learning Model (Custon CNN)
 
-- **Base Model**: EfficientNetB0 (pre-trained on ImageNet)
-- **Input**: 224×224×3 RGB images
+- **Base Model**: Custom CNN
+- **Input**: 224×224×3 (Width × Height × RGB Channels)
 - **Architecture**:
-  - EfficientNetB0 backbone (frozen initially)
-  - GlobalAveragePooling2D
-  - Dense(128, activation='relu')
+  - Conv2D ((222, 222, 32), activation='relu')
+  - MaxPooling2D (111, 111, 32)
+  - Conv2D ((109, 109, 64), activation='relu')
+  - MaxPooling2D ()(2, 2)
+  - Conv2D (64, (3, 3), activation='relu')
+  - GobalAveragePooling2D ()
+  - Dropout (0.5)
+  - Dense(64, activation='relu')
   - Dropout(0.3)
-  - Dense(3, activation='softmax')  # 3 classes
-- **Optimizer**: Adam (learning_rate=1e-4)
+  - Dense(3, activation='softmax')
+- **Optimizer**:Adam(learning_rate=1e-4)
 - **Loss**: Sparse Categorical Crossentropy
 
 ### Traditional ML Approach
@@ -273,7 +282,6 @@ This project is for educational purposes. Please refer to the AP-10K dataset lic
 ## 🙏 Acknowledgments
 
 - [AP-10K Dataset](https://github.com/AlexTheBad/AP-10K) for providing the animal pose dataset
-- EfficientNet authors for the pre-trained model architecture
 - TensorFlow and scikit-learn communities for the frameworks
 
 ---
