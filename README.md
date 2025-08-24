@@ -21,19 +21,19 @@ This project implements an animal weight classification system using deep learni
 This project uses two complementary approaches for animal weight classification:
 
 1. **Traditional ML Approach**: Histogram of Oriented Gradients (HOG) features + Random Forest
-2. **Deep Learning Approach**: Custom CNN
+2. **Deep Learning Approach**: Custom CNN with data augmentation
 
 The classification is based on body length measurements calculated from animal keypoint annotations, creating proxy labels for weight categories.
 
 ## ✨ Features
 
 - **Multi-approach Classification**: Both traditional ML and deep learning methods
-- **Robust Data Processing**: Handles missing data and various image formats
+- **Robust Data Processing**: Handles missing data and various image formats  
 - **Comprehensive Evaluation**: Detailed metrics, confusion matrices, and visualizations
-- **Transfer Learning**: Uses custom CNN for the model training
+- **Custom CNN Architecture**: Lightweight CNN model optimized for animal classification
 - **HOG Feature Extraction**: Traditional computer vision features for comparison
-- **Data Augmentation**: Improves model generalization
-- **Model Persistence**: Save and load trained models
+- **Data Augmentation**: Improves model generalization with rotation, shifts, and flips
+- **Model Persistence**: Save and load trained models with weights and architecture
 
 ## 📋 Prerequisites
 
@@ -60,10 +60,11 @@ conda install jupyter notebook
 
 ### 3. Clone/Download Project
 
-Download this project and navigate to the project directory.
+Download this project and navigate to the project directory:
 
-```
+```bash
 git clone https://github.com/Dkplucas/model.git
+cd model
 ```
 
 ### 4. Install Dependencies
@@ -84,7 +85,7 @@ jupyter notebook
 
 1. **Visit the official repository**: [AP-10K Dataset](https://github.com/AlexTheBad/AP-10K?tab=readme-ov-file)
 2. **Download the dataset** following the instructions in the repository
-3. **Extract the dataset** to your Jupyter notebook home directory with the following structure:
+3. **Extract the dataset** to a directory outside your git repository (to avoid large file issues) with the following structure:
 
 ```
 data/
@@ -112,11 +113,13 @@ data/
 ```
 animal_classification/
 ├── dataprocess.py          # Data preprocessing and label creation
-├── hogfeatures.py          # HOG feature extraction
+├── hogfeatures.py          # HOG feature extraction  
 ├── model.py                # Deep learning model training
+├── projection.py           # Additional analysis and projections
 ├── requirements_ml.txt     # Project dependencies
+├── .gitignore             # Git ignore file for dataset exclusion
 ├── README.md              # This file
-└── data/                  # Dataset directory (to be created)
+└── data/                  # Dataset directory (to be created outside repo)
     └── ap-10K/
         ├── annotations/   # JSON annotation files
         └── data/         # Image files
@@ -186,7 +189,7 @@ Run `model.py` in Jupyter Notebook:
 
 **Expected outputs:**
 
-- `best_weights.h5` - Best model weights
+- `best_weights.weights.h5` - Best model weights during training
 - `animal_weight_classifier_weights.h5` - Final model weights
 - `animal_weight_classifier_architecture.json` - Model architecture
 - `training_log.csv` - Training history
@@ -195,22 +198,22 @@ Run `model.py` in Jupyter Notebook:
 
 ## 🏗️ Model Architecture
 
-### Deep Learning Model (Custon CNN)
+### Deep Learning Model (Custom CNN)
 
-- **Base Model**: Custom CNN
-- **Input**: 224×224×3 (Width × Height × RGB Channels)
+- **Base Model**: Custom CNN from scratch
+- **Input**: 224×224×3 RGB images  
 - **Architecture**:
-  - Conv2D ((222, 222, 32), activation='relu')
-  - MaxPooling2D (111, 111, 32)
-  - Conv2D ((109, 109, 64), activation='relu')
-  - MaxPooling2D ()(2, 2)
-  - Conv2D (64, (3, 3), activation='relu')
-  - GobalAveragePooling2D ()
-  - Dropout (0.5)
-  - Dense(64, activation='relu')
+  - Conv2D(32 filters, 3×3 kernel, ReLU activation)
+  - MaxPooling2D(2×2)
+  - Conv2D(64 filters, 3×3 kernel, ReLU activation)  
+  - MaxPooling2D(2×2)
+  - Conv2D(64 filters, 3×3 kernel, ReLU activation)
+  - GlobalAveragePooling2D()
+  - Dropout(0.5)
+  - Dense(64, ReLU activation)
   - Dropout(0.3)
-  - Dense(3, activation='softmax')
-- **Optimizer**:Adam(learning_rate=1e-4)
+  - Dense(3, Softmax activation)  # 3 classes
+- **Optimizer**: Adam (learning_rate=1e-4)
 - **Loss**: Sparse Categorical Crossentropy
 
 ### Traditional ML Approach
