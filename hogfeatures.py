@@ -69,6 +69,7 @@ def extract_hog_features(image_path, target_size=(224, 224), data_base_dir='data
         print(f"Error processing image {image_path}: {e}")
         return None
 
+# Explore dataset structure
 def explore_dataset_structure(data_base_dir='data/ap-10K/'):
     """
     Explore the dataset structure to understand where images are stored.
@@ -104,6 +105,7 @@ def find_image_path(image_filename, data_base_dir='data/ap-10K/'):
             return os.path.join(root, image_filename)
     return None
 
+# Feature extraction function
 def extract_hog_features_with_search(image_path, target_size=(224, 224), data_base_dir='data/ap-10K/'):
     """
     Extract HOG features with recursive search for the image file.
