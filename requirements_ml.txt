@@ -11,10 +11,13 @@ pandas>=2.0.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
 
+# Model Serialization and Job Processing
+joblib>=1.3.0
+
 # Image Processing
 pillow>=10.0.0
 
-# Data Visualization and Plotting
+# Data Visualization and Plotting  
 plotly>=5.15.0
 
 # Standard Library Dependencies (usually included with Python)
