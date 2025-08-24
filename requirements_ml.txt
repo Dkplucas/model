@@ -1,0 +1,33 @@
+# Core Machine Learning and Deep Learning Libraries
+tensorflow>=2.15.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+scikit-image>=0.21.0
+
+# Data Processing and Analysis
+pandas>=2.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Image Processing
+pillow>=10.0.0
+
+# Data Visualization and Plotting
+plotly>=5.15.0
+
+# Standard Library Dependencies (usually included with Python)
+# json (built-in)
+# os (built-in)
+# pickle (built-in)
+# math (built-in)
+
+# Optional: For better performance and GPU support
+# tensorflow-gpu>=2.15.0  # Uncomment if using GPU
+
+# Optional: For Jupyter notebook support (if running in notebooks)
+# jupyter>=1.0.0
+# ipykernel>=6.0.0
+
+# Development and Testing (optional)
+# pytest>=7.0.0
+# flake8>=6.0.0
