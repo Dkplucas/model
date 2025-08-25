@@ -28,7 +28,7 @@ The classification is based on body length measurements calculated from animal k
 ## ✨ Features
 
 - **Multi-approach Classification**: Both traditional ML and deep learning methods
-- **Robust Data Processing**: Handles missing data and various image formats  
+- **Robust Data Processing**: Handles missing data and various image formats
 - **Comprehensive Evaluation**: Detailed metrics, confusion matrices, and visualizations
 - **Custom CNN Architecture**: Lightweight CNN model optimized for animal classification
 - **HOG Feature Extraction**: Traditional computer vision features for comparison
@@ -201,18 +201,18 @@ Run `model.py` in Jupyter Notebook:
 ### Deep Learning Model (Custom CNN)
 
 - **Base Model**: Custom CNN from scratch
-- **Input**: 224×224×3 RGB images  
+- **Input**: 224×224×3 RGB images
 - **Architecture**:
   - Conv2D(32 filters, 3×3 kernel, ReLU activation)
   - MaxPooling2D(2×2)
-  - Conv2D(64 filters, 3×3 kernel, ReLU activation)  
+  - Conv2D(64 filters, 3×3 kernel, ReLU activation)
   - MaxPooling2D(2×2)
   - Conv2D(64 filters, 3×3 kernel, ReLU activation)
   - GlobalAveragePooling2D()
   - Dropout(0.5)
   - Dense(64, ReLU activation)
   - Dropout(0.3)
-  - Dense(3, Softmax activation)  # 3 classes
+  - Dense(3)  # 3 classes
 - **Optimizer**: Adam (learning_rate=1e-4)
 - **Loss**: Sparse Categorical Crossentropy
 
